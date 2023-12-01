@@ -39,6 +39,7 @@ set(SOURCES
   shader.hpp
   gl_includes.hpp
   voxel_array.hpp
+  octree.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
