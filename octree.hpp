@@ -2,6 +2,9 @@
 #define OCTREE_HPP
 
 #include <memory>
+#include <iostream>
+
+struct OctreeNode;
 
 typedef std::shared_ptr<OctreeNode> OctreeNodePtr;
 
@@ -15,6 +18,7 @@ struct OctreeNode {
 class Octree {
 private:
     OctreeNodePtr root;
+    int treeDepth;
 public:
     Octree(int depth) {
         root = std::make_shared<OctreeNode>();
@@ -24,14 +28,43 @@ public:
         for (int i = 0; i < 8; i++) {
             root->children[i] = nullptr;
         }
+        treeDepth = depth;
     }
 
-    void insert(OctreeNodePtr where, int x, int y, int z, int value) {
-        
+    void insert(OctreeNodePtr node, int depth, int x, int y, int z, int value) {
+        if(depth < 0) {
+            std::cerr << "Depth is less than 0" << std::endl;
+            return;
+        }
+        if (depth == 0) {
+            node->value = value;
+            node->leaf = true;
+            node->empty = false;
+            return;
+        }
+        int xnorm = (x & (1 << depth) ) >> depth;
+        int ynorm = (y & (1 << depth) ) >> depth;
+        int znorm = (z & (1 << depth) ) >> depth;
+
+        int coord = xnorm + ynorm << 1 + znorm << 2;
+
+        if (node->children[coord] == nullptr) {
+            node->children[coord] = std::make_shared<OctreeNode>();
+            node->children[coord]->empty = true;
+            node->children[coord]->leaf = false;
+            node->children[coord]->value = 0;
+            for (int i = 0; i < 8; i++) {
+                node->children[coord]->children[i] = nullptr;
+            }
+        }
+
+        node->empty = false;
+
+        insert(node->children[coord], depth - 1, x, y, z, value);
     }
 
     void insert(int x, int y, int z, int value) {
-        insert(root, x, y, z, value);
+        insert(root, treeDepth-1, x, y, z, value);
     }
 
 };

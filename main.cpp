@@ -4,6 +4,7 @@
 #include "camera.hpp"
 #include "shader.hpp"
 #include "voxel_array.hpp"
+#include "octree.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -246,6 +247,12 @@ void render() {
     renderUI();
 }
 
+void testOctree() {
+    Octree octree(3);
+    octree.insert(0, 0, 0, 1);
+    octree.insert(1, 0, 0, 1);
+}
+
 // Update any accessible variable based on the current time
 void update(const float currentTimeInSec) {
 
@@ -292,6 +299,7 @@ void reloadShaders() {
 
 int main(int argc, char **argv) {
     init();
+    testOctree();
     while (!glfwWindowShouldClose(g_window)) {
         update(static_cast<float>(glfwGetTime()));
         render();
