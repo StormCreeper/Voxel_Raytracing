@@ -46,7 +46,7 @@ public:
         int ynorm = (y & (1 << depth) ) >> depth;
         int znorm = (z & (1 << depth) ) >> depth;
 
-        int coord = xnorm + ynorm << 1 + znorm << 2;
+        int coord = xnorm + (ynorm << 1) + (znorm << 2);
 
         if (node->children[coord] == nullptr) {
             node->children[coord] = std::make_shared<OctreeNode>();
@@ -56,15 +56,31 @@ public:
             for (int i = 0; i < 8; i++) {
                 node->children[coord]->children[i] = nullptr;
             }
+            node->empty = false;
         }
-
-        node->empty = false;
 
         insert(node->children[coord], depth - 1, x, y, z, value);
     }
 
     void insert(int x, int y, int z, int value) {
         insert(root, treeDepth-1, x, y, z, value);
+    }
+
+    void print(OctreeNodePtr node, int depth) {
+        if (node == nullptr) {
+            return;
+        }
+        for (int i = 0; i < depth; i++) {
+            std::cout << " ";
+        }
+        std::cout << node->value << std::endl;
+        for (int i = 0; i < 8; i++) {
+            print(node->children[i], depth + 1);
+        }
+    }
+
+    void print() {
+        print(root, 0);
     }
 
 };

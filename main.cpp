@@ -250,7 +250,11 @@ void render() {
 void testOctree() {
     Octree octree(3);
     octree.insert(0, 0, 0, 1);
-    octree.insert(1, 0, 0, 1);
+    octree.insert(7, 7, 7, 2);
+    octree.insert(1, 2, 4, 3);
+    octree.insert(5, 3, 1, 4);
+
+    octree.print();
 }
 
 // Update any accessible variable based on the current time
