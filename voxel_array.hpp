@@ -8,48 +8,22 @@
 class VoxelArray {
 public:
     GLuint sizeX, sizeY, sizeZ;
-    GLuint* data;
+    glm::vec3* colorData;
+    glm::vec3* normalData;
 
-    GLuint textureID;
+    GLuint colorTextureID;
+    GLuint normalTextureID;
 
 public:
     VoxelArray(GLuint sizeX, GLuint sizeY, GLuint sizeZ) {
         this->sizeX = sizeX;
         this->sizeY = sizeY;
         this->sizeZ = sizeZ;
-        data = new GLuint[sizeX * sizeY * sizeZ];
+        colorData = new glm::vec3[sizeX * sizeY * sizeZ];
+        normalData = new glm::vec3[sizeX * sizeY * sizeZ];
 
         generateVoxelData();
         generateTexture();
-    }
-
-    /**
-     * @brief Encode a color into a 9 bits unsigned integer.
-     * 5 bits per component.
-    */
-    GLuint encodeColor(GLubyte x, GLubyte y, GLubyte z) {
-        return (x & 0x1Fu) | ((y & 0x1Fu) << 5u) | ((z & 0x1Fu) << 10u);
-    }
-
-    /**
-     * @brief Encode a normal into a 21 bits unsigned integer.
-     * 5 bits per component.
-    */
-    GLuint encodeNormal(GLubyte x, GLubyte y, GLubyte z) {
-        return (x & 0x1Fu) | ((y & 0x1Fu) << 5u) | ((z & 0x1Fu) << 10u);
-    }
-
-    /**
-     * @brief Encode voxel data into a 3D texture.
-     * 32 bits per voxel.
-     * - 15 bits for the color (RGB)
-     *    - 5 bits per component
-     * - 15 bits for the normal (XYZ)
-     *   - 5 bits per component
-     * - 2 bits for the material
-    */
-    GLuint encodeVoxelData(GLuint color, GLuint normal, GLuint material) {
-        return (color & 0x7FFFu) | ((normal & 0x7FFFu) << 15u) | ((material & 0x3u) << 30u);
     }
 
     void generateVoxelData() {
@@ -60,39 +34,45 @@ public:
 
             glm::vec3 normalizedPos = glm::vec3(x, y, z) / glm::vec3(sizeX, sizeY, sizeZ) * 2.0f - 1.0f;
 
-            data[i] = 0;
+            colorData[i] = glm::vec3(0.0f);
+            normalData[i] = glm::vec3(0.0f);
             if(glm::length(normalizedPos) < 1.0f) {
-                GLubyte red = rand() % 32;
-                GLubyte green = rand() % 32;
-                GLubyte blue = rand() % 32;
-
-                glm::vec3 normal = glm::normalize(normalizedPos);
-                GLubyte nx = static_cast<GLubyte>((normal.x + 1.0f) * 0.5f * 32.0f);
-                GLubyte ny = static_cast<GLubyte>((normal.y + 1.0f) * 0.5f * 32.0f);
-                GLubyte nz = static_cast<GLubyte>((normal.z + 1.0f) * 0.5f * 32.0f);
-
-                GLubyte material = rand() % 4;
-
-                data[i] = encodeVoxelData(encodeColor(red, green, blue), encodeNormal(nx, ny, nz), material);
+                colorData[i] = glm::normalize(normalizedPos);
+                normalData[i] = glm::normalize(normalizedPos);
             }
         }
     }
 
     void generateTexture() {
-        glGenTextures(1, &textureID);
-        glBindTexture(GL_TEXTURE_3D, textureID);
+        glActiveTexture(GL_TEXTURE0);
+
+        glGenTextures(1, &colorTextureID);
+        glBindTexture(GL_TEXTURE_3D, colorTextureID);
 
         glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-        glTexImage3D(GL_TEXTURE_3D, 0, GL_R32UI, sizeX, sizeY, sizeZ, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, data);
+        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, sizeX, sizeY, sizeZ, 0, GL_RGB, GL_FLOAT, colorData);
+        glBindTexture(GL_TEXTURE_3D, 0);
+
+        glActiveTexture(GL_TEXTURE1);
+
+        glGenTextures(1, &normalTextureID);
+        glBindTexture(GL_TEXTURE_3D, normalTextureID);
+
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, sizeX, sizeY, sizeZ, 0, GL_RGB, GL_FLOAT, normalData);
+        glBindTexture(GL_TEXTURE_3D, 0);
     }
 
     ~VoxelArray() {
-        delete[] data;
-        if (textureID != 0) {
-            glDeleteTextures(1, &textureID);
-        }
+        delete[] colorData;
+        delete[] normalData;
+
+        glDeleteTextures(1, &colorTextureID);
+        glDeleteTextures(1, &normalTextureID);
     }
 };
 

@@ -5,7 +5,7 @@
 	Use shell texturing to create a grass effect
 */
 
-#version 330 core
+#version 460 core
 
 #define FLT_MAX 3.402823466e+38
 
@@ -22,6 +22,11 @@ uniform vec3 u_cameraPosition;
 
 uniform float u_time;
 
+struct Voxel {
+	vec3 color;
+	vec3 normal;
+};
+
 vec3 lightDir = normalize(vec3(1, 2, 1));
 
 struct Ray {
@@ -35,7 +40,8 @@ struct Ray {
 };
 
 struct VoxelMap {
-	usampler3D tex;
+	usampler3D colorTex;
+	usampler3D normalTex;
 	ivec3 size;
 };
 
@@ -61,21 +67,23 @@ float projectToCube(VoxelMap map,vec3 ro, vec3 rd) {
 	return t;
 }
 
-uint sampleVoxelGrid(VoxelMap map, int x, int y, int z) {
+Voxel sampleVoxelGrid(VoxelMap map, int x, int y, int z) {
 	/*x += map.size.x / 2;
 	y += map.size.y / 2;
 	z += map.size.z / 2;*/
 
-	if (x < 0 || y < 0 || z < 0 || x >= map.size.x || y >= map.size.y || z >= map.size.z) return 0u;
-	return texture(map.tex, vec3(x + .5, y + .5, z + .5) / map.size).r;
+	if (x < 0 || y < 0 || z < 0 || x >= map.size.x || y >= map.size.y || z >= map.size.z) return Voxel(vec3(0), vec3(0));
+	Voxel vox;
+	vox.color = texture(map.colorTex, vec3(x + .5, y + .5, z + .5) / map.size).rgb;
+	vox.normal = texture(map.normalTex, vec3(x + .5, y + .5, z + .5) / map.size).rgb;
+	return vox;
 }
 
-float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal, inout uint blockType, inout int mapX, inout int mapY, inout int mapZ) {
+float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal, inout Voxel vox, inout int mapX, inout int mapY, inout int mapZ) {
 	vec3 origin = orig;
 	
 	float t1 = max(projectToCube(map, origin, direction) - 0.001f, 0);
 	origin += t1 * direction;
-
 
 	mapX = int(floor(origin.x));
 	mapY = int(floor(origin.y));
@@ -139,8 +147,8 @@ float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal
 			side = 2;
 		}
 
-		uint block = sampleVoxelGrid(map, mapX, mapY, mapZ);
-		if (block != 0u) {
+		Voxel block = sampleVoxelGrid(map, mapX, mapY, mapZ);
+		if (length(block.color) > 0) {
 			if (side == 0) {
 				perpWallDist = (mapX - origin.x + (1 - stepX * step) / 2) / direction.x + t1;
 				normal = vec3(1, 0, 0) * -stepX;
@@ -153,42 +161,11 @@ float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal
 				perpWallDist = (mapZ - origin.z + (1 - stepZ * step) / 2) / direction.z + t1;
 				normal = vec3(0, 0, 1) * -stepZ;
 			}
-			blockType = block;
+			vox = block;
 			break;
 		}
 	}
 	return perpWallDist;
-}
-
-struct Voxel {
-	vec3 color;
-	vec3 normal;
-	uint material;
-};
-
-/**
-* @brief Encode voxel data into a 3D texture.
-* 32 bits per voxel.
-* - 15 bits for the color (RGB)
-*    - 5 bits per component
-* - 15 bits for the normal (XYZ)
-*    - 5 bits per component
-* - 2 bits for the material
-*/
-void decodeVoxel(uint blockType, inout Voxel vox) {
-	uint red = blockType & 0x111u;
-	uint green = (blockType >> 5u) & 0x1Fu;
-	uint blue = (blockType >> 10u) & 0x1Fu;
-
-	vox.color = vec3(red, green, blue) / 32.0f * 0.1f + vec3(0.9f);
-
-	uint nx = (blockType >> 15u) & 0x1Fu;
-	uint ny = (blockType >> 20u) & 0x1Fu;
-	uint nz = (blockType >> 25u) & 0x1Fu;
-
-	vox.normal = normalize(vec3(nx, ny, nz) / 32.0f * 2.0f - 1.0f);
-
-	vox.material = (blockType >> 30u) & 0x3u;
 }
 
 void main() {
@@ -201,26 +178,27 @@ void main() {
 
 	Ray ray = Ray(rayOrigin, rayDir, false, FLT_MAX, vec3(0), vec3(0));
 
-	uint blockType;
+	Voxel vox;
 	int mapX, mapY, mapZ;
 
-	float t = voxel_traversal(u_voxelMap, rayOrigin, rayDir, ray.surfaceNormal, blockType, mapX, mapY, mapZ);
+	vec3 normal;
+
+	float t = voxel_traversal(u_voxelMap, rayOrigin, rayDir, normal, vox, mapX, mapY, mapZ);
 	if (t > 0) {
 		ray.hit = true;
 		ray.t = t;
-		
-		Voxel vox;
-		decodeVoxel(blockType, vox);
+		ray.surfaceNormal = normal;
+		ray.surfaceColor = vox.color;
 		vec3 vertexPos = rayOrigin + rayDir * ray.t;
 
 		// Phong shading
 		vec3 ambient = 0.1f * vox.color;
-		vec3 diffuse = max(dot(vox.normal, lightDir), 0.0f) * vox.color;
+		vec3 diffuse = max(dot(normal, lightDir), 0.0f) * vox.color;
 		
-		vec3 reflectDir = reflect(-lightDir, vox.normal);
+		vec3 reflectDir = reflect(-lightDir, normal);
 		vec3 viewDir = normalize(u_cameraPosition - vertexPos);
 		vec3 halfwayDir = normalize(lightDir + viewDir);
-		vec3 specular = pow(max(dot(vox.normal, halfwayDir), 0.0f), 32.0f) * vec3(1.0f);
+		vec3 specular = pow(max(dot(normal, halfwayDir), 0.0f), 32.0f) * vec3(1.0f);
 
 		ray.surfaceColor = ambient + diffuse + specular;
 	}

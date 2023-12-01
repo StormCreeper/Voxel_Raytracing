@@ -62,7 +62,7 @@ void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods
     }
 }
 
-float g_cameraDistance = 128.0f;
+float g_cameraDistance = 64.0f;
 float g_cameraAngleX = 0.0f;
 
 // Scroll for zooming
@@ -87,8 +87,8 @@ void initGLFW() {
     }
 
     // Before creating the window, set some option flags
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
@@ -134,7 +134,7 @@ void initOpenGL() {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);  // specify the background color, used any time the framebuffer is cleared
 
     // Disable v-sync
-    // glfwSwapInterval(0);
+    glfwSwapInterval(0);
 }
 
 void initGPUprogram() {
@@ -149,7 +149,7 @@ void initGPUprogram() {
 
 void initCPUgeometry() {
     g_mesh = Mesh::genPlane();
-    g_voxelArray = std::make_shared<VoxelArray>(256, 256, 256);
+    g_voxelArray = std::make_shared<VoxelArray>(64, 64, 64);
 }
 
 void initCamera() {
@@ -231,8 +231,12 @@ void render() {
 
     setUniform(g_program, "u_time", static_cast<float>(glfwGetTime()));
 
-    glBindTexture(GL_TEXTURE_3D, g_voxelArray->textureID);
-    setUniform(g_program, "u_voxelMap.tex", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_3D, g_voxelArray->colorTextureID);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_3D, g_voxelArray->normalTextureID);
+    setUniform(g_program, "u_voxelMap.colorTex", 0);
+    setUniform(g_program, "u_voxelMap.normalTex", 1);
     setUniform(g_program, "u_voxelMap.size", glm::ivec3(g_voxelArray->sizeX, g_voxelArray->sizeY, g_voxelArray->sizeZ));
 
     // Render objects

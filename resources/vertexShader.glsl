@@ -3,7 +3,7 @@
 	author: Telo PHILIPPE
 */
 
-#version 330 core
+#version 460 core
 
 
 layout(location=0) in vec2 vPosition;
