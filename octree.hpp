@@ -31,20 +31,17 @@ public:
         treeDepth = depth;
     }
 
-    void insert(OctreeNodePtr node, int depth, int x, int y, int z, int value) {
-        if(depth < 0) {
-            std::cerr << "Depth is less than 0" << std::endl;
-            return;
-        }
-        if (depth == 0) {
+    void insert(OctreeNodePtr node, int d, int x, int y, int z, int value) {
+        if (d == treeDepth) {
             node->value = value;
             node->leaf = true;
             node->empty = false;
             return;
         }
-        int xnorm = (x & (1 << depth) ) >> depth;
-        int ynorm = (y & (1 << depth) ) >> depth;
-        int znorm = (z & (1 << depth) ) >> depth;
+        int c = treeDepth - d - 1;
+        int xnorm = (x & (1 << c)) >> c;
+        int ynorm = (y & (1 << c)) >> c;
+        int znorm = (z & (1 << c)) >> c;
 
         int coord = xnorm + (ynorm << 1) + (znorm << 2);
 
@@ -59,11 +56,11 @@ public:
             node->empty = false;
         }
 
-        insert(node->children[coord], depth - 1, x, y, z, value);
+        insert(node->children[coord], d + 1, x, y, z, value);
     }
 
     void insert(int x, int y, int z, int value) {
-        insert(root, treeDepth-1, x, y, z, value);
+        insert(root, 0, x, y, z, value);
     }
 
     void print(OctreeNodePtr node, int depth) {
@@ -81,6 +78,70 @@ public:
 
     void print() {
         print(root, 0);
+    }
+
+    int writeData(OctreeNodePtr node, int depth, int* data, int* index) {
+        if (node == nullptr) {
+            return -1;
+        }
+        if (node->leaf) {
+            return -1;
+        }
+        int numCellsX = 1 << (treeDepth - 1);
+        int numCellsY = 1 << (treeDepth - 1);
+        int numCellsZ = 1 << (treeDepth - 1);
+
+        int cellX = *index % numCellsX;
+        int cellY = (*index / numCellsX) % numCellsY;
+        int cellZ = (*index / (numCellsX * numCellsY)) % numCellsZ;
+
+        int currentIndex = *index;
+
+        index ++;
+        for (int i = 0; i < 8; i++) {
+            int encodedValue = 0;
+            if(node->children[i] != nullptr) {
+                if(node->children[i]->leaf) {
+                    int value = node->children[i]->value;
+                    encodedValue = value & (~(1 << 31));
+                } else {
+                    int childIndex = writeData(node->children[i], depth + 1, data, index);
+                    encodedValue = childIndex | (1 << 31);
+                }
+            }
+            int subCellX = cellX * 2 + (i & 1);
+            int subCellY = cellY * 2 + ((i & 2) >> 1);
+            int subCellZ = cellZ * 2 + ((i & 4) >> 2);
+
+            int subCellIndex = subCellX + subCellY * numCellsX * 2 + subCellZ * numCellsX * numCellsY * 4;
+            data[subCellIndex] = encodedValue;
+        }
+
+        return currentIndex;
+    }
+
+    void generateTexture() {
+        int* texture = new int[1 << (3 * treeDepth)];
+        // Clear texture
+        for (int i = 0; i < (1 << (3 * treeDepth)); i++) {
+            texture[i] = 0;
+        }
+        int index = 0;
+        writeData(root, 0, texture, &index);
+
+        std::cout << "Texture generated:" << std::endl;
+        for (int x=0; x < (1 << treeDepth); x++) {
+            for (int y=0; y < (1 << treeDepth); y++) {
+                for (int z=0; z < (1 << treeDepth); z++) {
+                    std::cout << std::hex << texture[x + y * (1 << treeDepth) + z * (1 << treeDepth) * (1 << treeDepth)] << std::dec << " ";
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
+        }
+
+        delete[] texture;
+
     }
 
 };
