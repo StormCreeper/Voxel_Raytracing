@@ -26,9 +26,10 @@ struct OctreeNode {
 class Octree {
 private:
     OctreeNodePtr root;
-    int treeDepth;
-    GLuint textureID;
 public:
+    GLuint textureID;
+    int treeDepth;
+    
     Octree(int depth) {
         root = std::make_shared<OctreeNode>();
         root->empty = true;
@@ -131,25 +132,32 @@ public:
 
     void generateTexture() {
         int* texture = new int[1 << (3 * treeDepth)];
-        for (int i = 0; i < (1 << (3 * treeDepth)); i++) {
+        /*for (int i = 0; i < (1 << (3 * treeDepth)); i++) {
             texture[i] = 0;
-        }
+        }*/
         int index = 0;
         writeData(root, 0, texture, &index);
 
-        std::cout << "Texture generated:" << std::endl;
-        int ts = 1 << treeDepth;
-        for (int x=0; x < (1 << treeDepth); x++) {
-            for (int y=0; y < (1 << treeDepth); y++) {
-                for (int z=0; z < (1 << treeDepth); z++) {
-                    int value = texture[x + y * ts + z * ts * ts];
-                    std::cout << std::hex <<  value << std::dec << " ";
-                }
-                std::cout << std::endl;
-            }
-            std::cout << std::endl;
-        }
+        // Opengl texture generation
+
+        glActiveTexture(GL_TEXTURE0);
+
+        glGenTextures(1, &textureID);
+        glBindTexture(GL_TEXTURE_3D, textureID);
+
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glTexImage3D(GL_TEXTURE_3D, 0, GL_R32UI, 1 << treeDepth, 1 << treeDepth, 1 << treeDepth, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, texture);
+        glBindTexture(GL_TEXTURE_3D, 0);
+
         delete[] texture;
+    }
+
+    ~Octree() {
+        if(textureID) {
+            glDeleteTextures(1, &textureID);
+        }
     }
 };
 

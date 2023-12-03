@@ -31,6 +31,7 @@ GLuint g_program {};  // A GPU program contains at least a vertex shader and a f
 Camera g_camera {};
 
 std::shared_ptr<Mesh> g_mesh {};
+std::shared_ptr<Octree> g_octree {};
 
 float g_fps = 0.0f;
 
@@ -97,7 +98,7 @@ void initGLFW() {
     // Create the window
     g_window = glfwCreateWindow(
         1024, 768,
-        "Interactive 3D Applications (OpenGL) - Simple Solar System", nullptr, nullptr);
+        "Voxel octrees rendering", nullptr, nullptr);
     if (!g_window) {
         std::cerr << "ERROR: Failed to open window" << std::endl;
         glfwTerminate();
@@ -113,7 +114,6 @@ void initGLFW() {
 
 void initImGui() {
     // Setup Dear ImGui context
-    IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
@@ -150,7 +150,27 @@ void initGPUprogram() {
 
 void initCPUgeometry() {
     g_mesh = Mesh::genPlane();
-    g_voxelArray = std::make_shared<VoxelArray>(64, 64, 64);
+    g_voxelArray = std::make_shared<VoxelArray>(128, 128, 128);
+
+    g_octree = std::make_shared<Octree>(7);
+
+    for(int i=0; i<128; i++) {
+        for(int j=0; j<128; j++) {
+            for(int k=0; k<128; k++) {
+                glm::vec3 color = g_voxelArray->colorData[i + j * 128 + k * 128 * 128];
+                if(glm::length(color) > 0.0f) {
+                    unsigned int r = color.x * 255.0f;
+                    unsigned int g = color.y * 255.0f;
+                    unsigned int b = color.z * 255.0f;
+                    g_octree->insert(i, j, k, r << 16 | g << 8 | b);
+                }
+            }
+        }
+    }
+
+    //g_octree->print();
+
+    g_octree->generateTexture();
 }
 
 void initCamera() {
@@ -240,21 +260,16 @@ void render() {
     setUniform(g_program, "u_voxelMap.normalTex", 1);
     setUniform(g_program, "u_voxelMap.size", glm::ivec3(g_voxelArray->sizeX, g_voxelArray->sizeY, g_voxelArray->sizeZ));
 
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, g_octree->textureID);
+    setUniform(g_program, "u_octreeTex", 3);
+    setUniform(g_program, "u_octreeDepth", g_octree->treeDepth);
+
     // Render objects
     
     g_mesh->render();
 
     renderUI();
-}
-
-void testOctree() {
-    Octree octree(3);
-    octree.insert(0, 0, 0, 1);
-    octree.insert(7, 7, 7, 2);
-    octree.insert(1, 2, 4, 3);
-    octree.insert(5, 3, 1, 4);
-
-    octree.print();
 }
 
 // Update any accessible variable based on the current time
@@ -303,7 +318,6 @@ void reloadShaders() {
 
 int main(int argc, char **argv) {
     init();
-    testOctree();
     while (!glfwWindowShouldClose(g_window)) {
         update(static_cast<float>(glfwGetTime()));
         render();

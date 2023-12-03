@@ -36,8 +36,11 @@ public:
 
             colorData[i] = glm::vec3(0.0f);
             normalData[i] = glm::vec3(0.0f);
-            if(glm::length(normalizedPos) < 1.0f) {
-                colorData[i] = glm::normalize(normalizedPos);
+            if(glm::length(normalizedPos) < 1.0f && glm::length(normalizedPos) > 0.95f) {
+                float red   = sin((normalizedPos.x + normalizedPos.y + normalizedPos.z)*10.0f) * 0.4f + 0.6f;
+                float green = sin((normalizedPos.x + normalizedPos.y + normalizedPos.z)*10.0f + 2.0f) * 0.4f + 0.6f;
+                float blue  = sin((normalizedPos.x + normalizedPos.y + normalizedPos.z)*10.0f + 4.0f) * 0.4f + 0.6f;
+                colorData[i] = glm::vec3(red, green, blue);
                 normalData[i] = glm::normalize(normalizedPos);
             }
         }

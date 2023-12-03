@@ -9,6 +9,12 @@
 
 #define FLT_MAX 3.402823466e+38
 
+const int value_flag = 0xF0000000;
+const int value_mask = 0x00FFFFFF;
+
+const int address_flag = 0x0F000000;
+const int address_mask = 0x00FFFFFF;
+
 out vec4 outColor;
 
 in vec2 screenPos;
@@ -27,7 +33,7 @@ struct Voxel {
 	vec3 normal;
 };
 
-vec3 lightDir = normalize(vec3(1, 2, 1));
+vec3 lightDir = normalize(vec3(1, 2, -0.5));
 
 struct Ray {
 	vec3 origin;
@@ -44,6 +50,9 @@ struct VoxelMap {
 	usampler3D normalTex;
 	ivec3 size;
 };
+
+uniform usampler3D u_octreeTex;
+uniform int u_octreeDepth;
 
 uniform VoxelMap u_voxelMap;
 
@@ -65,6 +74,33 @@ float projectToCube(VoxelMap map,vec3 ro, vec3 rd) {
 	float t = max(tx, max(ty, tz));
 	
 	return t;
+}
+
+const int nCells = 1 << (u_octreeDepth-1);
+
+Voxel sampleOctree(int x, int y, int z) {
+	if(x < 0 || y < 0 || z < 0 || x >= 1 << u_octreeDepth || y >= 1 << u_octreeDepth || z >= 1 << u_octreeDepth) return Voxel(vec3(0.0, 0.0, 0.0), vec3(0));
+	
+	ivec3 currentCell = ivec3(0, 0, 0);
+	for(int d=0; d<u_octreeDepth; d++) {
+		uint c = u_octreeDepth - d - 1;
+		ivec3 localPos = ivec3((x & (1 << c)) >> c, (y & (1 << c)) >> c, (z & (1 << c)) >> c);
+		ivec3 cellPos = currentCell * 2 + localPos;
+
+		uint cell = texture(u_octreeTex, vec3(cellPos) / float(1 << u_octreeDepth)).r;
+
+		if((cell & (~value_mask)) == value_flag) {
+			return Voxel(vec3((cell & 0xFF0000) >> 16, (cell & 0xFF00) >> 8, cell & 0xFF) / 255.0f, vec3(0));
+		} else if((cell & (~address_mask)) == address_flag) {
+			int newIndex = int(cell) & address_mask;
+			currentCell.x = newIndex % nCells;
+			currentCell.y = (newIndex / nCells) % nCells;
+			currentCell.z = newIndex / (nCells * nCells);
+		} else {
+			return Voxel(vec3(0.0, 0.0, 0.0), vec3(0));
+		}
+	}
+	return Voxel(vec3(0.0, 0.0, 0.0), vec3(0));
 }
 
 Voxel sampleVoxelGrid(VoxelMap map, int x, int y, int z) {
@@ -147,7 +183,7 @@ float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal
 			side = 2;
 		}
 
-		Voxel block = sampleVoxelGrid(map, mapX, mapY, mapZ);
+		Voxel block = sampleOctree(mapX, mapY, mapZ);// = sampleVoxelGrid(map, mapX, mapY, mapZ);
 		if (length(block.color) > 0) {
 			if (side == 0) {
 				perpWallDist = (mapX - origin.x + (1 - stepX * step) / 2) / direction.x + t1;
@@ -190,15 +226,16 @@ void main() {
 		ray.surfaceNormal = normal;
 		ray.surfaceColor = vox.color;
 		vec3 vertexPos = rayOrigin + rayDir * ray.t;
+		ray.surfaceNormal = normalize(vec3(mapX, mapY, mapZ) - vec3(1 << (u_octreeDepth - 1)));
 
 		// Phong shading
 		vec3 ambient = 0.1f * vox.color;
-		vec3 diffuse = max(dot(normal, lightDir), 0.0f) * vox.color;
+		vec3 diffuse = max(dot(ray.surfaceNormal, lightDir), 0.0f) * vox.color;
 		
-		vec3 reflectDir = reflect(-lightDir, normal);
+		vec3 reflectDir = reflect(-lightDir, ray.surfaceNormal);
 		vec3 viewDir = normalize(u_cameraPosition - vertexPos);
 		vec3 halfwayDir = normalize(lightDir + viewDir);
-		vec3 specular = pow(max(dot(normal, halfwayDir), 0.0f), 32.0f) * vec3(1.0f);
+		vec3 specular = pow(max(dot(ray.surfaceNormal, halfwayDir), 0.0f), 32.0f) * vec3(1.0f);
 
 		ray.surfaceColor = ambient + diffuse + specular;
 	}
