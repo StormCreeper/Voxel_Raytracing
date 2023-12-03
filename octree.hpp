@@ -4,6 +4,14 @@
 #include <memory>
 #include <iostream>
 
+#include "gl_includes.hpp"
+
+const int value_flag = 0xF0000000;
+const int value_mask = 0x00FFFFFF;
+
+const int address_flag = 0x0F000000;
+const int address_mask = 0x00FFFFFF;
+
 struct OctreeNode;
 
 typedef std::shared_ptr<OctreeNode> OctreeNodePtr;
@@ -19,6 +27,7 @@ class Octree {
 private:
     OctreeNodePtr root;
     int treeDepth;
+    GLuint textureID;
 public:
     Octree(int depth) {
         root = std::make_shared<OctreeNode>();
@@ -97,16 +106,16 @@ public:
 
         int currentIndex = *index;
 
-        index ++;
+        *index = *index + 1;
         for (int i = 0; i < 8; i++) {
             int encodedValue = 0;
             if(node->children[i] != nullptr) {
                 if(node->children[i]->leaf) {
                     int value = node->children[i]->value;
-                    encodedValue = value & (~(1 << 31));
+                    encodedValue = value & value_mask | value_flag;
                 } else {
                     int childIndex = writeData(node->children[i], depth + 1, data, index);
-                    encodedValue = childIndex | (1 << 31);
+                    encodedValue = childIndex & address_mask | address_flag;
                 }
             }
             int subCellX = cellX * 2 + (i & 1);
@@ -122,7 +131,6 @@ public:
 
     void generateTexture() {
         int* texture = new int[1 << (3 * treeDepth)];
-        // Clear texture
         for (int i = 0; i < (1 << (3 * treeDepth)); i++) {
             texture[i] = 0;
         }
@@ -130,20 +138,19 @@ public:
         writeData(root, 0, texture, &index);
 
         std::cout << "Texture generated:" << std::endl;
+        int ts = 1 << treeDepth;
         for (int x=0; x < (1 << treeDepth); x++) {
             for (int y=0; y < (1 << treeDepth); y++) {
                 for (int z=0; z < (1 << treeDepth); z++) {
-                    std::cout << std::hex << texture[x + y * (1 << treeDepth) + z * (1 << treeDepth) * (1 << treeDepth)] << std::dec << " ";
+                    int value = texture[x + y * ts + z * ts * ts];
+                    std::cout << std::hex <<  value << std::dec << " ";
                 }
                 std::cout << std::endl;
             }
             std::cout << std::endl;
         }
-
         delete[] texture;
-
     }
-
 };
 
 
