@@ -28,7 +28,7 @@ private:
     OctreeNodePtr root;
 public:
     GLuint textureID;
-    int treeDepth;
+    GLuint treeDepth;
     
     Octree(int depth) {
         root = std::make_shared<OctreeNode>();

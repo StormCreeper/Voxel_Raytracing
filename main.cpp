@@ -31,7 +31,6 @@ GLuint g_program {};  // A GPU program contains at least a vertex shader and a f
 Camera g_camera {};
 
 std::shared_ptr<Mesh> g_mesh {};
-std::shared_ptr<Octree> g_octree {};
 
 float g_fps = 0.0f;
 
@@ -150,27 +149,7 @@ void initGPUprogram() {
 
 void initCPUgeometry() {
     g_mesh = Mesh::genPlane();
-    g_voxelArray = std::make_shared<VoxelArray>(128, 128, 128);
-
-    g_octree = std::make_shared<Octree>(7);
-
-    for(int i=0; i<128; i++) {
-        for(int j=0; j<128; j++) {
-            for(int k=0; k<128; k++) {
-                glm::vec3 color = g_voxelArray->colorData[i + j * 128 + k * 128 * 128];
-                if(glm::length(color) > 0.0f) {
-                    unsigned int r = color.x * 255.0f;
-                    unsigned int g = color.y * 255.0f;
-                    unsigned int b = color.z * 255.0f;
-                    g_octree->insert(i, j, k, r << 16 | g << 8 | b);
-                }
-            }
-        }
-    }
-
-    //g_octree->print();
-
-    g_octree->generateTexture();
+    g_voxelArray = std::make_shared<VoxelArray>(7);
 }
 
 void initCamera() {
@@ -253,17 +232,9 @@ void render() {
     setUniform(g_program, "u_time", static_cast<float>(glfwGetTime()));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_3D, g_voxelArray->colorTextureID);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_3D, g_voxelArray->normalTextureID);
-    setUniform(g_program, "u_voxelMap.colorTex", 0);
-    setUniform(g_program, "u_voxelMap.normalTex", 1);
-    setUniform(g_program, "u_voxelMap.size", glm::ivec3(g_voxelArray->sizeX, g_voxelArray->sizeY, g_voxelArray->sizeZ));
-
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_3D, g_octree->textureID);
-    setUniform(g_program, "u_octreeTex", 3);
-    setUniform(g_program, "u_octreeDepth", g_octree->treeDepth);
+    glBindTexture(GL_TEXTURE_3D, g_voxelArray->octree->textureID);
+    setUniform(g_program, "u_octreeTex", 0);
+    setUniform(g_program, "u_octreeDepth", (int)(g_voxelArray->octree->treeDepth));
 
     // Render objects
     
@@ -288,7 +259,7 @@ void update(const float currentTimeInSec) {
 
     // Update the camera position
 
-    glm::vec3 targetPosition = glm::vec3(g_voxelArray->sizeX, g_voxelArray->sizeY, g_voxelArray->sizeZ) * 0.5f;
+    glm::vec3 targetPosition = glm::vec3(g_voxelArray->size, g_voxelArray->size, g_voxelArray->size) * 0.5f;
     g_camera.setTarget(targetPosition);
 
     glm::vec3 cameraOffset = glm::normalize(glm::vec3(cos(g_cameraAngleX), 0.0f, sin(g_cameraAngleX))) * (1.1f + g_cameraDistance);

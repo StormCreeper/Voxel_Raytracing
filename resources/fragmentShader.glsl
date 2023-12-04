@@ -54,18 +54,18 @@ struct VoxelMap {
 uniform usampler3D u_octreeTex;
 uniform int u_octreeDepth;
 
-uniform VoxelMap u_voxelMap;
+const int mapSize = 1 << (u_octreeDepth);
 
-float projectToCube(VoxelMap map,vec3 ro, vec3 rd) {
+float projectToCube(vec3 ro, vec3 rd) {
 	
 	float tx1 = (0 - ro.x) / rd.x;
-	float tx2 = (map.size.x - ro.x) / rd.x;
+	float tx2 = (mapSize - ro.x) / rd.x;
 
 	float ty1 = (0 - ro.y) / rd.y;
-	float ty2 = (map.size.y - ro.y) / rd.y;
+	float ty2 = (mapSize - ro.y) / rd.y;
 
 	float tz1 = (0 - ro.z) / rd.z;
-	float tz2 = (map.size.z - ro.z) / rd.z;
+	float tz2 = (mapSize - ro.z) / rd.z;
 
 	float tx = max(min(tx1, tx2), 0);
 	float ty = max(min(ty1, ty2), 0);
@@ -78,11 +78,11 @@ float projectToCube(VoxelMap map,vec3 ro, vec3 rd) {
 
 const int nCells = 1 << (u_octreeDepth-1);
 
-Voxel sampleOctree(int x, int y, int z) {
+Voxel sampleOctree(int x, int y, int z, inout int d) {
 	if(x < 0 || y < 0 || z < 0 || x >= 1 << u_octreeDepth || y >= 1 << u_octreeDepth || z >= 1 << u_octreeDepth) return Voxel(vec3(0.0, 0.0, 0.0), vec3(0));
 	
 	ivec3 currentCell = ivec3(0, 0, 0);
-	for(int d=0; d<u_octreeDepth; d++) {
+	for(d=0; d<u_octreeDepth; d++) {
 		uint c = u_octreeDepth - d - 1;
 		ivec3 localPos = ivec3((x & (1 << c)) >> c, (y & (1 << c)) >> c, (z & (1 << c)) >> c);
 		ivec3 cellPos = currentCell * 2 + localPos;
@@ -103,22 +103,20 @@ Voxel sampleOctree(int x, int y, int z) {
 	return Voxel(vec3(0.0, 0.0, 0.0), vec3(0));
 }
 
-Voxel sampleVoxelGrid(VoxelMap map, int x, int y, int z) {
-	/*x += map.size.x / 2;
-	y += map.size.y / 2;
-	z += map.size.z / 2;*/
 
-	if (x < 0 || y < 0 || z < 0 || x >= map.size.x || y >= map.size.y || z >= map.size.z) return Voxel(vec3(0), vec3(0));
-	Voxel vox;
-	vox.color = texture(map.colorTex, vec3(x + .5, y + .5, z + .5) / map.size).rgb;
-	vox.normal = texture(map.normalTex, vec3(x + .5, y + .5, z + .5) / map.size).rgb;
-	return vox;
+vec3 getDepthColor(int depth) {
+	int r = (912873911 + depth * 1239879) % 255;
+	int g = (12938192 + depth * 223143223) % 255;
+	int b = (123981 + depth * 498273987) % 255;
+
+	return normalize(vec3(r, g, b) / 255.0f);
 }
 
-float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal, inout Voxel vox, inout int mapX, inout int mapY, inout int mapZ) {
+float voxel_traversal(vec3 orig, vec3 direction, inout vec3 normal, inout Voxel vox, inout int mapX, inout int mapY, inout int mapZ, inout float through) {
+	through = 1;
 	vec3 origin = orig;
 	
-	float t1 = max(projectToCube(map, origin, direction) - 0.001f, 0);
+	float t1 = max(projectToCube(origin, direction) - 0.001f, 0);
 	origin += t1 * direction;
 
 	mapX = int(floor(origin.x));
@@ -166,7 +164,7 @@ float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal
 	int step = 1;
 
 	for (int i = 0; i < 1000; i++) {
-		if ((mapX >= map.size.x && stepX > 0) || (mapY >= map.size.y && stepY > 0) || (mapZ >= map.size.z && stepZ > 0)) break;
+		if ((mapX >= mapSize && stepX > 0) || (mapY >= mapSize && stepY > 0) || (mapZ >= mapSize && stepZ > 0)) break;
 		if ((mapX < 0 && stepX < 0) || (mapY < 0 && stepY < 0) || (mapZ < 0 && stepZ < 0)) break;
 
 		if (sideDistX < sideDistY && sideDistX < sideDistZ) {
@@ -183,7 +181,9 @@ float voxel_traversal(VoxelMap map, vec3 orig, vec3 direction, inout vec3 normal
 			side = 2;
 		}
 
-		Voxel block = sampleOctree(mapX, mapY, mapZ);// = sampleVoxelGrid(map, mapX, mapY, mapZ);
+		int depth;
+		Voxel block = sampleOctree(mapX, mapY, mapZ, depth);
+		through *= pow(0.995f, float(depth));
 		if (length(block.color) > 0) {
 			if (side == 0) {
 				perpWallDist = (mapX - origin.x + (1 - stepX * step) / 2) / direction.x + t1;
@@ -219,7 +219,8 @@ void main() {
 
 	vec3 normal;
 
-	float t = voxel_traversal(u_voxelMap, rayOrigin, rayDir, normal, vox, mapX, mapY, mapZ);
+	float through;
+	float t = voxel_traversal(rayOrigin, rayDir, normal, vox, mapX, mapY, mapZ, through);
 	if (t > 0) {
 		ray.hit = true;
 		ray.t = t;
@@ -244,4 +245,8 @@ void main() {
 	} else {
 		outColor = vec4(rayDir, 1.0f);
 	}
+	outColor.r = min(outColor.r, 1.0f);
+	outColor.g = min(outColor.g, 1.0f);
+	outColor.b = min(outColor.b, 1.0f);
+	outColor.rgb *= 1 - pow(1-through, 1.9f);
 }

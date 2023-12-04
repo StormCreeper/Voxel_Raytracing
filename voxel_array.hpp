@@ -2,80 +2,71 @@
 #define VOXEL_ARRAY_HPP
 
 #include "gl_includes.hpp"
+#include "octree.hpp"
+
 #include <random>
 #include <iostream>
+#include <memory>
+
 
 class VoxelArray {
+private:
 public:
-    GLuint sizeX, sizeY, sizeZ;
+    GLuint size;
+    int depth;
     glm::vec3* colorData;
-    glm::vec3* normalData;
 
-    GLuint colorTextureID;
-    GLuint normalTextureID;
+    std::shared_ptr<Octree> octree;
 
 public:
-    VoxelArray(GLuint sizeX, GLuint sizeY, GLuint sizeZ) {
-        this->sizeX = sizeX;
-        this->sizeY = sizeY;
-        this->sizeZ = sizeZ;
-        colorData = new glm::vec3[sizeX * sizeY * sizeZ];
-        normalData = new glm::vec3[sizeX * sizeY * sizeZ];
+    VoxelArray(GLuint depth) {
+        this->depth = depth;
+        size = 1 << depth;
+        colorData = new glm::vec3[size * size * size];
 
         generateVoxelData();
-        generateTexture();
+        generateOctree();
+
     }
 
     void generateVoxelData() {
-        for (int i = 0; i < sizeX * sizeY * sizeZ; i++) {
-            GLuint x =  i % sizeX;
-            GLuint y = (i / sizeX) % sizeY;
-            GLuint z =  i / (sizeX * sizeY);
+        for (int i = 0; i < size * size * size; i++) {
+            GLuint x =  i % size;
+            GLuint y = (i / size) % size;
+            GLuint z =  i / (size * size);
 
-            glm::vec3 normalizedPos = glm::vec3(x, y, z) / glm::vec3(sizeX, sizeY, sizeZ) * 2.0f - 1.0f;
+            glm::vec3 normalizedPos = glm::vec3(x, y, z) / glm::vec3(size, size, size) * 2.0f - 1.0f;
 
             colorData[i] = glm::vec3(0.0f);
-            normalData[i] = glm::vec3(0.0f);
             if(glm::length(normalizedPos) < 1.0f && glm::length(normalizedPos) > 0.95f) {
                 float red   = sin((normalizedPos.x + normalizedPos.y + normalizedPos.z)*10.0f) * 0.4f + 0.6f;
                 float green = sin((normalizedPos.x + normalizedPos.y + normalizedPos.z)*10.0f + 2.0f) * 0.4f + 0.6f;
                 float blue  = sin((normalizedPos.x + normalizedPos.y + normalizedPos.z)*10.0f + 4.0f) * 0.4f + 0.6f;
                 colorData[i] = glm::vec3(red, green, blue);
-                normalData[i] = glm::normalize(normalizedPos);
             }
         }
     }
 
-    void generateTexture() {
-        glActiveTexture(GL_TEXTURE0);
-
-        glGenTextures(1, &colorTextureID);
-        glBindTexture(GL_TEXTURE_3D, colorTextureID);
-
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, sizeX, sizeY, sizeZ, 0, GL_RGB, GL_FLOAT, colorData);
-        glBindTexture(GL_TEXTURE_3D, 0);
-
-        glActiveTexture(GL_TEXTURE1);
-
-        glGenTextures(1, &normalTextureID);
-        glBindTexture(GL_TEXTURE_3D, normalTextureID);
-
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, sizeX, sizeY, sizeZ, 0, GL_RGB, GL_FLOAT, normalData);
-        glBindTexture(GL_TEXTURE_3D, 0);
+    void generateOctree() {
+        octree = std::make_shared<Octree>(depth);
+        for(int i=0; i<size; i++) {
+            for(int j=0; j<size; j++) {
+                for(int k=0; k<size; k++) {
+                    glm::vec3 color = colorData[i + j * size + k * size * size];
+                    if(glm::length(color) > 0.0f) {
+                        unsigned int r = color.x * 255.0f;
+                        unsigned int g = color.y * 255.0f;
+                        unsigned int b = color.z * 255.0f;
+                        octree->insert(i, j, k, r << 16 | g << 8 | b);
+                    }
+                }
+            }
+        }
+        octree->generateTexture();
     }
 
     ~VoxelArray() {
         delete[] colorData;
-        delete[] normalData;
-
-        glDeleteTextures(1, &colorTextureID);
-        glDeleteTextures(1, &normalTextureID);
     }
 };
 
